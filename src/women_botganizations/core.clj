@@ -37,11 +37,19 @@
    ": "
    (rand-nth urls)))
 
+(defn get-text [tweet]
+  (if (not (:truncated tweet))
+    (do (println "got regular tweet")
+        (:text tweet))
+    (do (println "got truncated tweet" (pprint/pprint tweet))
+        (-> tweet :extended_tweet :full_text))))
+
 (defn handle-tweet [tweet]
   (try
-    (when (:text tweet)
-      (println "got status: " (:text tweet))
-      (if (some (partial clojure.string/includes? (:text tweet)) targets)
+    (when-let [text (get-text tweet)]
+      (println "got status: " (:id tweet))
+      (println "got text: " text)
+      (if (some (partial clojure.string/includes? text) targets)
         (if (and ignore-replies (:in_reply_to_status_id tweet))
           (println "status is a reply - ignoring")
           (do
@@ -64,11 +72,18 @@
     (println "cancelling track with meta" (pprint (meta @stream)))
     (reset! stream nil)))
 
+(defn start-stream []
+  (reset! stream (api/statuses-filter creds :params {:track track
+                                                     :tweet_mode "extended"})))
+
 (defn start []
-  (reset! stream (api/statuses-filter creds :params {:track track}))
-  (.start (Thread. (doseq [tweet @stream]
+  (.start (Thread. (loop []
                      (try
-                       (handle-tweet tweet)
+                       (start-stream)
+                       (doseq [tweet @stream]
+                         (handle-tweet tweet))
                        (catch Exception e
                          (println "error getting next tweet")
-                         (pprint/pprint (pr-str e))))))))
+                         (pprint/pprint (pr-str e))
+                         (cancel-stream)))
+                     (recur)))))
