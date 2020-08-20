@@ -9,7 +9,7 @@
 
 (def ignore-replies false)
 (def track "ארגוני")
-(def targets #{"איפה ארגוני הנשים" "למה ארגוני הנשים לא"})
+(def targets #{"איפה ארגוני הנשים" "למה ארגוני הנשים לא", "איפה כל ארגוני הנשים"})
 
 (def pinuki "1295546258220879872")
 
@@ -20,7 +20,6 @@
 (def urls ["https://bit.ly/323p3Z8"
            "https://rb.gy/ampemy"
            "https://cutt.ly/qfwjcAR"
-           "https://shorturl.at/kmBK5"
            "https://www.drove.com/campaign/5cf781e4f167cf0001d1c575"])
 
 (defn status [screen-name]
@@ -40,9 +39,9 @@
 
 (defn get-text [tweet]
   (if (not (:truncated tweet))
-    (do (println "got regular tweet " (pprint/pprint tweet))
+    (do (println "got regular tweet")
         (:text tweet))
-    (do (println "got truncated tweet" (pprint/pprint tweet))
+    (do (println "got truncated tweet")
         (-> tweet :extended_tweet :full_text))))
 
 (defn handle-tweet [tweet]
@@ -88,9 +87,12 @@
 (defn process-tweets []
   (start-stream)
   (a/go-loop [[tweet channel] (a/alts! [tweets (a/timeout timeout)])]
-    (when (nil? tweet)
-      (throw (Exception. "no tweet for too long")))
-    (handle-tweet tweet)
+    (try
+      (println "no tweet for a while now...")
+      (when tweet
+        (handle-tweet tweet))
+      (catch Exception e
+        (println "error handling tweets")))
     (recur (a/alts! [tweets (a/timeout timeout)]))))
 
 (defn start []
