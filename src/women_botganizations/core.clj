@@ -67,6 +67,7 @@
       (pprint/pprint e))))
 
 (def stream (atom nil))
+(def started (atom false))
 
 (defn cancel-stream []
   (when @stream
@@ -75,36 +76,30 @@
 
 (defn start-stream []
   (println "starting stream")
-  (reset! stream (api/statuses-filter creds :params {:track track
-                                                     :tweet_mode "extended"})))
+  (let [s (api/statuses-filter creds :params {:track track
+                                              :tweet_mode "extended"})]
+    (reset! stream s)
+    (a/onto-chan tweets s))
+  (println "stream started"))
 
 (def tweets (a/chan (a/buffer 100)))
 
 (def timeout (* 5 60 1000))
 
-(defn take-tweet []
-  (a/go-loop [tweet (take 1 @stream)]
-    (a/put! tweets tweet)
-    (recur (take 1 @stream))))
 
 (defn process-tweets []
-  (try
-    (start-stream)
-    (a/go-loop [[tweet channel] (a/alts! tweets (a/timeout timeout))]
-      (when (nil? tweet)
-        (println "no response for too long, restarting")
-        (throw (Exception. "no tweet for too long")))
-      (handle-tweet tweet)
-      (recur (a/alts! tweets (a/timeout timeout))))
-    (catch Exception e
-      (println "error processing tweets")
-      (pprint/pprint (pr-str e)))))
+  (start-stream)
+  (a/go-loop [[tweet channel] (a/alts! [tweets (a/timeout timeout)])]
+    (when (nil? tweet)
+      (throw (Exception. "no tweet for too long")))
+    (handle-tweet tweet)
+    (recur (a/alts! [tweets (a/timeout timeout)]))))
 
 (defn start []
   (try
     (process-tweets)
     (catch Exception e
-      (println "error getting next tweet")
       (pprint/pprint (pr-str e))
+      (println "error getting next tweet, restarting filter stream")
       (cancel-stream)
-      (process-tweets))))
+      (start))))
