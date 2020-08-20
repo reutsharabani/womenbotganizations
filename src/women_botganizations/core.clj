@@ -25,22 +25,22 @@
 
 (defn status [screen-name]
   (str
-   (rand-nth jitter0)
-   " "
-   "@"
-   screen-name
-   "! "
-   (rand-nth jitter1)
-   " "
-   (rand-nth jitter2)
-   " לארגוני הנשים "
-   (rand-nth jitter3)
-   ": "
-   (rand-nth urls)))
+    (rand-nth jitter0)
+    " "
+    "@"
+    screen-name
+    "! "
+    (rand-nth jitter1)
+    " "
+    (rand-nth jitter2)
+    " לארגוני הנשים "
+    (rand-nth jitter3)
+    ": "
+    (rand-nth urls)))
 
 (defn get-text [tweet]
   (if (not (:truncated tweet))
-    (do (println "got regular tweet " (pprint tweet))
+    (do (println "got regular tweet " (pprint/pprint tweet))
         (:text tweet))
     (do (println "got truncated tweet" (pprint/pprint tweet))
         (-> tweet :extended_tweet :full_text))))
@@ -56,8 +56,8 @@
           (do
             (println "status contains target term, replying")
             (api/statuses-update creds
-                                 :params {:status (status (-> tweet :user :screen_name))
-                                          :in_reply_to_user_id (-> tweet :user :id)
+                                 :params {:status                (status (-> tweet :user :screen_name))
+                                          :in_reply_to_user_id   (-> tweet :user :id)
                                           :in_reply_to_status_id (:id tweet)
                                           ;;:media-ids [pinuki]
                                           })))
@@ -71,21 +71,19 @@
 
 (defn cancel-stream []
   (when @stream
-    (println "cancelling track with meta" (pprint (meta @stream)))
+    (println "cancelling track with meta" (pprint/pprint (meta @stream)))
     (reset! stream nil)))
+
+(def tweets (a/chan (a/buffer 100)))
+(def timeout (* 5 60 1000))
 
 (defn start-stream []
   (println "starting stream")
-  (let [s (api/statuses-filter creds :params {:track track
+  (let [s (api/statuses-filter creds :params {:track      track
                                               :tweet_mode "extended"})]
     (reset! stream s)
-    (a/onto-chan tweets s))
+    (a/go (a/onto-chan! tweets s)))
   (println "stream started"))
-
-(def tweets (a/chan (a/buffer 100)))
-
-(def timeout (* 5 60 1000))
-
 
 (defn process-tweets []
   (start-stream)
