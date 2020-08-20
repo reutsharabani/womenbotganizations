@@ -1,6 +1,7 @@
 (ns women-botganizations.core
   (:require [twttr.api :as api]
             [twttr.auth :refer [map->UserCredentials]]
+            [clojure.core.async :as a]
             [clojure.data.json :as json]
             [clojure.pprint :as pprint]))
 
@@ -39,7 +40,7 @@
 
 (defn get-text [tweet]
   (if (not (:truncated tweet))
-    (do (println "got regular tweet")
+    (do (println "got regular tweet " (pprint tweet))
         (:text tweet))
     (do (println "got truncated tweet" (pprint/pprint tweet))
         (-> tweet :extended_tweet :full_text))))
@@ -73,17 +74,37 @@
     (reset! stream nil)))
 
 (defn start-stream []
+  (println "starting stream")
   (reset! stream (api/statuses-filter creds :params {:track track
                                                      :tweet_mode "extended"})))
 
+(def tweets (a/chan (a/buffer 100)))
+
+(def timeout (* 5 60 1000))
+
+(defn take-tweet []
+  (a/go-loop [tweet (take 1 @stream)]
+    (a/put! tweets tweet)
+    (recur (take 1 @stream))))
+
+(defn process-tweets []
+  (try
+    (start-stream)
+    (a/go-loop [[tweet channel] (a/alts! tweets (a/timeout timeout))]
+      (when (nil? tweet)
+        (println "no response for too long, restarting")
+        (throw (Exception. "no tweet for too long")))
+      (handle-tweet tweet)
+      (recur (a/alts! tweets (a/timeout timeout))))
+    (catch Exception e
+      (println "error processing tweets")
+      (pprint/pprint (pr-str e)))))
+
 (defn start []
-  (.start (Thread. (loop []
-                     (try
-                       (start-stream)
-                       (doseq [tweet @stream]
-                         (handle-tweet tweet))
-                       (catch Exception e
-                         (println "error getting next tweet")
-                         (pprint/pprint (pr-str e))
-                         (cancel-stream)))
-                     (recur)))))
+  (try
+    (process-tweets)
+    (catch Exception e
+      (println "error getting next tweet")
+      (pprint/pprint (pr-str e))
+      (cancel-stream)
+      (process-tweets))))

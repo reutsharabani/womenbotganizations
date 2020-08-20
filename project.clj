@@ -5,5 +5,6 @@
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [twttr "3.2.3"]
+                 [org.clojure/core.async "1.3.610"]
                  [org.clojure/data.json "1.0.0"]]
   :repl-options {:init-ns women-botganizations.core})
